@@ -8,4 +8,3 @@ logs/
 data/
 .pytest_cache/
 node_modules/
-dist/

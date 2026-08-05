@@ -7,6 +7,15 @@
 #     expected for this app — download the Excel export before leaving.
 #   - The service spins down after 15 min idle; the next request cold-starts (~1 min).
 #   - HTTPS is automatic on *.onrender.com (required for camera + PWA install).
+#   - The frontend (static/*.js, static/*.css) is bundled with Vite into
+#     dist/static, which IS committed to this repo rather than built here —
+#     this service's Python native runtime isn't guaranteed to have Node.js
+#     available, so buildCommand stays pip-only. This means: after any change
+#     under static/, run `npm run build` locally and commit the updated
+#     dist/static before deploying, or the live site will keep serving the
+#     previous build. app/main.py serves dist/static automatically when it
+#     exists, falling back to the raw static/ source tree (unbundled) when it
+#     doesn't.
 services:
   - type: web
     name: cardscan-ocr
