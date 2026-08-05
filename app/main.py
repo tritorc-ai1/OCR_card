@@ -143,10 +143,7 @@ _UNBUNDLED_PRECACHE_URLS = [
     "/static/icons/icon-512.png",
     "/static/icons/icon-192-maskable.png",
     "/static/icons/icon-512-maskable.png",
-    "/static/fonts/ibm-plex-sans-400.woff2",
-    "/static/fonts/ibm-plex-sans-500.woff2",
-    "/static/fonts/ibm-plex-sans-600.woff2",
-    "/static/fonts/ibm-plex-mono-500.woff2",
+    "/static/fonts/manrope-variable.woff2",
 ]
 
 
@@ -174,7 +171,7 @@ def precache_urls() -> list[str]:
     for name in ("icon-192.png", "icon-512.png", "icon-192-maskable.png", "icon-512-maskable.png"):
         if (STATIC_DIR / "icons" / name).exists():
             urls.add(f"/static/icons/{name}")
-    for name in ("ibm-plex-sans-400.woff2", "ibm-plex-sans-500.woff2", "ibm-plex-sans-600.woff2", "ibm-plex-mono-500.woff2"):
+    for name in ("manrope-variable.woff2",):
         if (STATIC_DIR / "fonts" / name).exists():
             urls.add(f"/static/fonts/{name}")
     return sorted(urls)

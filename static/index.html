@@ -67,15 +67,15 @@
         </div>
         <form id="loginForm">
           <div style="margin-bottom:16px">
-            <label style="display:block;margin-bottom:6px;font-weight:500;color:var(--text)">Email</label>
-            <input type="email" name="email" placeholder="you@tritorc.com" autocomplete="username" required style="width:100%;padding:8px;border:1px solid var(--line-strong);border-radius:var(--radius);box-sizing:border-box">
+            <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px;color:var(--text-dim)">Email</label>
+            <input type="email" name="email" placeholder="you@tritorc.com" autocomplete="username" required style="width:100%;min-height:var(--touch-min);padding:0 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius);box-sizing:border-box;font:inherit;font-size:var(--font-base)">
           </div>
-          <div style="margin-bottom:16px">
-            <label style="display:block;margin-bottom:6px;font-weight:500;color:var(--text)">Password</label>
-            <input type="password" name="password" placeholder="••••••••" autocomplete="current-password" required style="width:100%;padding:8px;border:1px solid var(--line-strong);border-radius:var(--radius);box-sizing:border-box">
+          <div style="margin-bottom:20px">
+            <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px;color:var(--text-dim)">Password</label>
+            <input type="password" name="password" placeholder="••••••••" autocomplete="current-password" required style="width:100%;min-height:var(--touch-min);padding:0 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius);box-sizing:border-box;font:inherit;font-size:var(--font-base)">
           </div>
           <p id="loginError" style="color:var(--danger);font-size:14px;margin-bottom:16px"></p>
-          <button type="submit" style="width:100%;padding:10px;background:var(--teal);color:white;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer">Sign in</button>
+          <button type="submit" class="btn primary block">Sign in</button>
         </form>
       </div>
     </div>
@@ -323,15 +323,15 @@
       <form style="display:flex;flex-direction:column;gap:12px">
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:500">Current password</label>
-          <input type="password" name="current_password" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box">
+          <input type="password" name="current_password" required style="width:100%;min-height:var(--touch-min);padding:0 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius);box-sizing:border-box;font:inherit;font-size:var(--font-base)">
         </div>
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:500">New password</label>
-          <input type="password" name="new_password" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box">
+          <input type="password" name="new_password" required style="width:100%;min-height:var(--touch-min);padding:0 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius);box-sizing:border-box;font:inherit;font-size:var(--font-base)">
         </div>
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:500">Confirm password</label>
-          <input type="password" name="confirm_password" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box">
+          <input type="password" name="confirm_password" required style="width:100%;min-height:var(--touch-min);padding:0 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius);box-sizing:border-box;font:inherit;font-size:var(--font-base)">
         </div>
         <button type="submit" class="btn primary block">Update password</button>
       </form>

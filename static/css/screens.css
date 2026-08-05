@@ -78,7 +78,7 @@ body.bootstrapping::after {
   align-items: center;
   justify-content: center;
   background: var(--teal);
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
   font-size: 12px;
   font-weight: 600;
 }
@@ -93,7 +93,7 @@ body.bootstrapping::after {
   justify-content: center;
   background: var(--teal);
   color: #fff;
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
   font-size: 22px;
   font-weight: 700;
 }
@@ -359,18 +359,18 @@ body.scan-open #bottomNav {
 }
 
 .hero-stat:has(.num.amber) {
-  background: rgba(234, 115, 23, .12);
+  background: var(--accent-tint);
 }
 
 .hero-stat .num {
-  font-family: "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
   font-size: var(--font-xl);
   font-weight: 700;
   color: var(--ink);
 }
 
 .hero-stat .num.amber {
-  color: var(--amber);
+  color: var(--accent-dark);
 }
 
 .hero-stat .label {
@@ -812,7 +812,7 @@ body.scan-open #bottomNav {
   gap: var(--space-3);
   padding: var(--space-4);
   padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
-  background: rgba(15, 23, 42, .92);
+  background: rgba(10, 10, 10, .92);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
@@ -836,7 +836,7 @@ body.scan-open #bottomNav {
   margin: 0;
   padding: 0;
   border-radius: 0;
-  background: #0f172a;
+  background: var(--ink);
 }
 
 .image-dialog img {
@@ -860,7 +860,7 @@ body.scan-open #bottomNav {
   aspect-ratio: 16 / 10;
   object-fit: cover;
   border-radius: var(--radius);
-  background: #eef0f4;
+  background: var(--panel-tint);
   cursor: zoom-in;
 }
 
@@ -1064,12 +1064,57 @@ body.scan-open #bottomNav {
 
 .queue-row:last-child { border-bottom: none; }
 
-.queue-row img {
-  width: 44px;
-  height: 44px;
+/* Thumbnail + live "scanning" treatment — shows the actual card photo
+   being processed, not just an abstract status chip, so it's obvious
+   which card the app is working on and that it's actively doing so. */
+.queue-thumb-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
   border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--panel-tint);
+}
+
+.queue-thumb-wrap img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  background: #eef0f4;
+  display: block;
+}
+
+.queue-thumb-wrap .scan-sweep,
+.queue-thumb-wrap .scan-check {
+  display: none;
+}
+
+.queue-thumb-wrap.is-scanning .scan-sweep {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(214, 49, 47, .35) 45%, rgba(214, 49, 47, .7) 50%, rgba(214, 49, 47, .35) 55%, transparent 100%);
+  transform: translateY(-100%);
+  animation: queue-scan-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes queue-scan-sweep {
+  0% { transform: translateY(-100%); }
+  50% { transform: translateY(100%); }
+  100% { transform: translateY(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-thumb-wrap.is-scanning .scan-sweep { animation: none; opacity: .35; }
+}
+
+.queue-thumb-wrap.is-done .scan-check {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(22, 121, 74, .82);
 }
 
 .queue-row-body {
@@ -1294,7 +1339,7 @@ table.admin-table .user-email {
   white-space: nowrap;
 }
 
-.role-chip.admin { background: rgba(19, 130, 130, .13); color: var(--teal-dark); }
+.role-chip.admin { background: var(--accent-tint); color: var(--accent-dark); }
 .role-chip.user { background: var(--panel-tint); color: var(--text-dim); }
 
 .status-chip.active { background: var(--success-bg); color: var(--success); }
@@ -1574,7 +1619,7 @@ table.admin-table .user-email {
     inset: 0;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 23, 42, .7);
+    background: rgba(10, 10, 10, .7);
   }
 
   .scan-modal-panel {
@@ -1605,7 +1650,7 @@ table.admin-table .user-email {
   aspect-ratio: 1;
   border-radius: var(--radius);
   overflow: hidden;
-  background: #eef0f4;
+  background: var(--panel-tint);
 }
 
 .process-thumb img {

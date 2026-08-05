@@ -63,11 +63,25 @@ function renderLiveListFromQueue(queue) {
   const list = $("#processLiveList");
   list.innerHTML = queue.map((it) => `
     <div class="queue-row" data-queue-id="${it.id}">
-      <img src="${it.thumbUrl}" alt="" style="width:60px;height:60px;object-fit:cover;border-radius:4px;">
+      ${thumbWrapHtml(it.thumbUrl, it.status)}
       <div class="queue-row-body"><div class="name">${it.id}</div></div>
       <div class="row-actions"><span class="status-chip ${it.status}">${it.status}</span></div>
     </div>
   `).join("");
+}
+
+// Shared thumbnail markup for both live-processing views: a "scanning" sweep
+// plays over the actual captured photo while it's uploading/being read, and
+// a checkmark overlay confirms completion — the goal is that a user glancing
+// at this list can see their own card, not just an abstract status chip.
+function thumbWrapHtml(url, status) {
+  const stateClass = status === "uploading" ? "is-scanning" : status === "done" ? "is-done" : "";
+  return `
+    <div class="queue-thumb-wrap ${stateClass}">
+      <img src="${url}" alt="">
+      <div class="scan-sweep"></div>
+      <div class="scan-check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></div>
+    </div>`;
 }
 
 function updateMeterFromQueue(queue) {
@@ -173,7 +187,7 @@ function renderLiveList() {
   const list = $("#processLiveList");
   list.innerHTML = selected.map((it) => `
     <div class="queue-row" data-client-id="${it.clientId}">
-      <img src="${it.url}" alt="">
+      ${thumbWrapHtml(it.url, it.status)}
       <div class="queue-row-body"><div class="name">${escapeHtml(it.name)}</div></div>
       <div class="row-actions">${statusChipHtml(it)}${retryButtonHtml(it)}</div>
     </div>
@@ -205,6 +219,11 @@ function renderRow(it) {
   row.querySelector(".row-actions").innerHTML = statusChipHtml(it) + retryButtonHtml(it);
   const retryBtn = row.querySelector("[data-retry]");
   if (retryBtn) retryBtn.addEventListener("click", () => retryOne(it.clientId));
+  const thumbWrap = row.querySelector(".queue-thumb-wrap");
+  if (thumbWrap) {
+    thumbWrap.classList.toggle("is-scanning", it.status === "uploading");
+    thumbWrap.classList.toggle("is-done", it.status === "done");
+  }
 }
 
 function updateMeter() {

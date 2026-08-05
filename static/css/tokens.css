@@ -1,57 +1,48 @@
+/* Single variable-font file covering weights 200-800, replacing the old
+   3-weight IBM Plex Sans set — one font request instead of three, and a
+   geometric grotesk that matches tritorc.com's own typeface family instead
+   of the previous humanist-leaning IBM Plex. */
 @font-face {
-  font-family: "IBM Plex Sans";
+  font-family: "Manrope";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
   font-display: swap;
-  src: url("/static/fonts/ibm-plex-sans-400.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "IBM Plex Sans";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/static/fonts/ibm-plex-sans-500.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "IBM Plex Sans";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/static/fonts/ibm-plex-sans-600.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/static/fonts/ibm-plex-mono-500.woff2") format("woff2");
+  src: url("/static/fonts/manrope-variable.woff2") format("woff2");
 }
 
 :root {
   color-scheme: light;
-  --ink: #0a1526;
-  --paper: #f3f5f8;
+  /* Tritorc-matched palette: one accent (their red), true near-black text,
+     warm off-white surfaces — see tritorc.com. Deliberately single-theme:
+     this app is being re-skinned specifically to match a light, high-
+     contrast brand, so a dark mode would fight the whole point of the
+     redesign rather than serve it. */
+  --ink: #0a0a0a;
+  --paper: #f7f6f3;
   --panel: #ffffff;
-  --panel-tint: #eff2f5;
-  --teal: #138282;
-  --teal-dark: #0e6868;
+  --panel-tint: #f1efeb;
+  --accent: #d6312f;
+  --accent-dark: #a3241f;
+  --accent-tint: #fbeae9;
+  /* Kept as aliases so every existing var(--teal)/var(--teal-dark) reference
+     across components.css/screens.css repaints red without having to touch
+     each call site individually — the name is legacy, the value is not. */
+  --teal: var(--accent);
+  --teal-dark: var(--accent-dark);
   --amber: #ea7317;
-  --line: #dbdee2;
-  --line-strong: #c7ccd2;
-  --text: #141b24;
-  --text-dim: #5f6469;
-  --success: #057a3f;
-  --success-bg: rgba(67, 148, 101, .15);
-  --warn: #d97706;
-  --warn-bg: #fef3e2;
-  --danger: #ac3031;
-  --danger-bg: rgba(172, 48, 49, .1);
-  --radius: 8px;
+  --line: #e6e3dd;
+  --line-strong: #d6d2ca;
+  --text: #171614;
+  --text-dim: #56544d;
+  --success: #16794a;
+  --success-bg: rgba(22, 121, 74, .13);
+  --warn: #b5590a;
+  --warn-bg: #fdf1e3;
+  --danger: var(--accent-dark);
+  --danger-bg: rgba(214, 49, 47, .1);
+  --radius: 14px;
 
-  --radius-lg: 16px;
+  --radius-lg: 22px;
   --radius-full: 999px;
   --space-1: 4px;
   --space-2: 8px;
@@ -61,9 +52,9 @@
   --space-6: 32px;
   --touch-min: 48px;
   --nav-height: 64px;
-  --shadow-1: 0 1px 3px rgba(20, 33, 61, .12);
-  --shadow-2: 0 4px 16px rgba(20, 33, 61, .16);
-  --shadow-fab: 0 6px 20px rgba(15, 118, 110, .35);
+  --shadow-1: 0 1px 3px rgba(10, 10, 10, .1);
+  --shadow-2: 0 4px 16px rgba(10, 10, 10, .16);
+  --shadow-fab: 0 6px 20px rgba(163, 36, 31, .35);
   --font-sm: 13px;
   --font-base: 15px;
   --font-lg: 17px;
@@ -94,7 +85,7 @@ html, body {
 
 body {
   margin: 0;
-  font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  font-family: "Manrope", "Segoe UI", Arial, sans-serif;
   font-size: var(--font-base);
   background: var(--paper);
   color: var(--text);
@@ -119,7 +110,7 @@ a {
 }
 
 .mono {
-  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
 }
 
 .sr-only {
