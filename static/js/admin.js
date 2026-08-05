@@ -148,10 +148,40 @@ function showUserActivity(email) {
   sheet.showModal?.();
 }
 
+function adminSkeletonHtml() {
+  return `
+    <div class="admin-grid">
+      <div class="admin-sidebar">
+        <div class="admin-card">
+          <div class="skeleton-line" style="width:50%;height:18px;margin-bottom:10px"></div>
+          <div class="admin-stat-row">
+            <div class="skeleton-block" style="height:48px"></div>
+            <div class="skeleton-block" style="height:48px"></div>
+          </div>
+        </div>
+        <div class="admin-card">
+          <div class="skeleton-line" style="width:100%;height:20px;margin-bottom:6px"></div>
+          <div class="skeleton-line" style="width:100%;height:20px;margin-bottom:6px"></div>
+          <div class="skeleton-line" style="width:100%;height:20px"></div>
+        </div>
+      </div>
+      <div class="admin-main">
+        <div class="skeleton-line" style="width:30%;height:24px;margin-bottom:16px"></div>
+        <div class="skeleton-block" style="height:200px"></div>
+      </div>
+    </div>
+  `;
+}
+
 export async function refreshAdminScreen(state) {
   window.state = state; // for delegated handlers
   const container = document.getElementById("adminContent");
   if (!container) return;
+
+  // Revisiting #/admin re-fetches (adminStats took ~2.5s in the perf audit)
+  // — without this, the previous view's users/stats stay on screen looking
+  // current while fresh data loads.
+  container.innerHTML = adminSkeletonHtml();
 
   try {
     const [statsResp, usersResp] = await Promise.all([

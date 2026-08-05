@@ -185,8 +185,19 @@ export async function loadUsage() {
 export async function switchEvent(eventId) {
   state.eventId = eventId;
   refreshEventLabel(state);
-  await loadRecords();
-  await loadUsage();
+
+  // Show the records/hero skeleton immediately (both already branch on
+  // state.loading) instead of leaving the previous event's stale records
+  // visible while the new event's data loads. A 250ms floor stops the
+  // skeleton from flashing on fast switches.
+  state.loading = true;
+  handleRouteChange();
+  const minDisplay = new Promise((resolve) => window.setTimeout(resolve, 250));
+  try {
+    await Promise.all([loadRecords(), loadUsage(), minDisplay]);
+  } finally {
+    state.loading = false;
+  }
   handleRouteChange();
   showToast(`Switched to ${state.events.find((e) => e.event_id === eventId)?.name || eventId}`, "success");
 }

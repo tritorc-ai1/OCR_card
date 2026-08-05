@@ -7,14 +7,26 @@ the *existing* scan/event endpoints are applied in main.py as added
 from __future__ import annotations
 
 import asyncio
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app import auth
 from app.storage import repositories, users
 
 router = APIRouter()
+
+# admin_stats() runs 3 full-collection aggregations with no filter (they
+# summarize ALL history by design, so no index can narrow them) plus a count
+# — cheap today at this data volume, but it's the exact endpoint the original
+# perf audit measured at 2.56s, and it will only get heavier as scan_log grows
+# since nothing ever prunes it. A short TTL cache (same pattern already used
+# in app/storage/mongo_usage.py) means only one request per window actually
+# pays for the aggregations; everyone else in that window gets an instant hit.
+_ADMIN_STATS_CACHE_TTL_SECONDS = 30.0
+_admin_stats_cache: dict[int, tuple[float, dict]] = {}
 
 
 # --- Request models ---------------------------------------------------------
@@ -149,9 +161,7 @@ async def admin_patch_user(email: str, payload: PatchUserIn, admin: dict = Depen
     return users.public_view(users.get_user(target))
 
 
-@router.get("/admin/stats")
-async def admin_stats(days: int = 30, admin: dict = Depends(auth.require_admin)) -> dict:
-    days = max(1, min(int(days), 365))
+def _compute_admin_stats(days: int) -> dict:
     from app.storage.db import utc_now
 
     return {
@@ -164,10 +174,21 @@ async def admin_stats(days: int = 30, admin: dict = Depends(auth.require_admin))
     }
 
 
+@router.get("/admin/stats")
+async def admin_stats(days: int = 30, admin: dict = Depends(auth.require_admin)) -> dict:
+    days = max(1, min(int(days), 365))
+    cached = _admin_stats_cache.get(days)
+    if cached is not None and (time.monotonic() - cached[0]) < _ADMIN_STATS_CACHE_TTL_SECONDS:
+        return cached[1]
+    result = await run_in_threadpool(_compute_admin_stats, days)
+    _admin_stats_cache[days] = (time.monotonic(), result)
+    return result
+
+
 @router.get("/me/stats")
 async def my_stats(days: int = 30, user: dict = Depends(auth.require_user)) -> dict:
     """A regular user's own card-scanning activity — the non-admin counterpart
     to /admin/stats, scoped to just the caller so it doesn't leak other users'
     numbers. Backs the Home dashboard's per-user tracking card."""
     days = max(1, min(int(days), 365))
-    return repositories.scan_stats_for_user(user["email"], days)
+    return await run_in_threadpool(repositories.scan_stats_for_user, user["email"], days)

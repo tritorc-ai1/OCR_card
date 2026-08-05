@@ -94,7 +94,7 @@ html, body {
 
 body {
   margin: 0;
-  font-family: "Inter", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
   font-size: var(--font-base);
   background: var(--paper);
   color: var(--text);
@@ -119,7 +119,7 @@ a {
 }
 
 .mono {
-  font-family: "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+  font-family: "IBM Plex Mono", Consolas, monospace;
 }
 
 .sr-only {

@@ -59,6 +59,33 @@ def ensure_indexes() -> None:
     db[SCAN_LOG].create_index([("scanned_by", 1), ("created_at", -1)])
     db[SCAN_LOG].create_index("event_id")
 
+    # list_records() filters by event_id AND sorts by created_at — the
+    # single-field event_id index above only covers the filter, leaving Mongo
+    # to sort matching docs in memory. This compound index covers both.
+    db[CARD_RECORDS].create_index([("event_id", 1), ("created_at", -1)])
+    # find_duplicate_flag() is a two-field equality match, run on every scan;
+    # single-field indexes on email/phone_primary alone don't cover it as well
+    # as a compound index scoped to the same event.
+    db[CARD_RECORDS].create_index([("event_id", 1), ("email", 1)])
+    db[CARD_RECORDS].create_index([("event_id", 1), ("phone_primary", 1)])
+
+    # audits had NO index at all: save_audit()'s upsert key is (card_id, kind)
+    # — hit on every scan — and reset_event_data()'s cascade delete filters by
+    # event_id. Both were full collection scans.
+    db[AUDITS].create_index([("card_id", 1), ("kind", 1)], unique=True)
+    db[AUDITS].create_index("event_id")
+
+    # reset_event_data()'s cascade delete also hits these by event_id, but
+    # only card_id was indexed on either collection.
+    db[OCR_RESULTS].create_index("event_id")
+    db[FIELD_CANDIDATES].create_index("event_id")
+
+    # scan_counts_by_user_day() range-filters on day with no index today;
+    # scan_stats_for_user()'s daily breakdown filters scanned_by+day, which the
+    # existing scanned_by+created_at index doesn't cover.
+    db[SCAN_LOG].create_index("day")
+    db[SCAN_LOG].create_index([("scanned_by", 1), ("day", 1)])
+
 
 # --- Events -----------------------------------------------------------------
 

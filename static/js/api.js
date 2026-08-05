@@ -71,8 +71,8 @@ export function downloadUrl(eventId, options = {}) {
   return `/events/${eventId}/download${query ? `?${query}` : ""}`;
 }
 
-export function imageUrl(eventId, filename) {
-  return `/events/${eventId}/images/${encodeURIComponent(filename)}`;
+export function imageUrl(eventId, filename, { thumb = false } = {}) {
+  return `/events/${eventId}/images/${encodeURIComponent(filename)}${thumb ? "?thumb=1" : ""}`;
 }
 
 // --- Auth endpoints -----

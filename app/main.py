@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from datetime import date
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from app.config import (
     DEFAULT_EVENT_DATE,
@@ -22,7 +24,7 @@ from app.config import (
     MAX_UPLOAD_BYTES,
 )
 from app.extraction.candidate_extractors import extract_candidates
-from app.imaging.preprocess import compress_for_storage, preprocess_image
+from app.imaging.preprocess import compress_for_storage, make_thumbnail, preprocess_image
 from app.llm.gemini_client import (
     gemini_key_labels,
     is_gemini_configured,
@@ -64,7 +66,10 @@ IMAGES_BUCKET_FIELD = "images"
 app = FastAPI(title="LLM Business Card Scanner")
 app.include_router(auth_router)
 
-STATIC_DIR = Path("static")
+# Prefer the Vite build output (dist/static) once `npm run build` has run —
+# it has bundled/minified JS+CSS and content-hashed filenames. Fall back to
+# the raw static/ source tree for local dev without a Node toolchain.
+STATIC_DIR = Path("dist/static") if Path("dist/static").exists() else Path("static")
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -116,6 +121,65 @@ def static_assets_version() -> str:
     return _static_version_cache["version"]
 
 
+# Same shape as the original hand-written PRECACHE_URLS in static/sw.js —
+# used verbatim when running unbuilt (no dist/static/.vite/manifest.json yet).
+_UNBUNDLED_PRECACHE_URLS = [
+    "/",
+    "/manifest.webmanifest",
+    "/static/css/tokens.css",
+    "/static/css/components.css",
+    "/static/css/screens.css",
+    "/static/js/app-shell.js",
+    "/static/js/api.js",
+    "/static/js/utils.js",
+    "/static/js/scan.js",
+    "/static/js/queue.js",
+    "/static/js/process-sheet.js",
+    "/static/js/records.js",
+    "/static/js/dashboard.js",
+    "/static/js/events.js",
+    "/static/js/more.js",
+    "/static/icons/icon-192.png",
+    "/static/icons/icon-512.png",
+    "/static/icons/icon-192-maskable.png",
+    "/static/icons/icon-512-maskable.png",
+    "/static/fonts/ibm-plex-sans-400.woff2",
+    "/static/fonts/ibm-plex-sans-500.woff2",
+    "/static/fonts/ibm-plex-sans-600.woff2",
+    "/static/fonts/ibm-plex-mono-500.woff2",
+]
+
+
+def precache_urls() -> list[str]:
+    """URLs the service worker should proactively cache on install.
+
+    When built with Vite, JS/CSS filenames are content-hashed and only known
+    from dist/static/.vite/manifest.json — read it instead of hardcoding
+    filenames that would otherwise 404 (and break cache.addAll entirely) the
+    moment a build changes them.
+    """
+    manifest_path = STATIC_DIR / ".vite" / "manifest.json"
+    if not manifest_path.exists():
+        return _UNBUNDLED_PRECACHE_URLS
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return _UNBUNDLED_PRECACHE_URLS
+    urls = {"/", "/manifest.webmanifest"}
+    for entry in manifest.values():
+        if entry.get("file"):
+            urls.add(f"/static/{entry['file']}")
+        for css_file in entry.get("css", []):
+            urls.add(f"/static/{css_file}")
+    for name in ("icon-192.png", "icon-512.png", "icon-192-maskable.png", "icon-512-maskable.png"):
+        if (STATIC_DIR / "icons" / name).exists():
+            urls.add(f"/static/icons/{name}")
+    for name in ("ibm-plex-sans-400.woff2", "ibm-plex-sans-500.woff2", "ibm-plex-sans-600.woff2", "ibm-plex-mono-500.woff2"):
+        if (STATIC_DIR / "fonts" / name).exists():
+            urls.add(f"/static/fonts/{name}")
+    return sorted(urls)
+
+
 def _seed_mongo_on_startup() -> None:
     # All durable data lives in MongoDB now (no local disk). Create indexes and
     # seed the default event; tolerate a slow/unreachable Mongo at boot so the
@@ -129,6 +193,15 @@ def _seed_mongo_on_startup() -> None:
         from app.config import PROTECTED_ADMIN_EMAIL
 
         seed_test_user(PROTECTED_ADMIN_EMAIL, "Tritorc@123", role="admin", created_by="seed")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        # Creates the usage_counters indexes now instead of on whatever request
+        # first calls /llm-usage or a scan's enforce_usage_limits() — mongo_usage
+        # itself is warm the instant this runs, since it now shares this same
+        # connection, but its own collection-specific indexes are still created
+        # lazily on first use unless warmed here too.
+        mongo_usage.initialize()
     except Exception:  # noqa: BLE001
         pass
 
@@ -158,7 +231,13 @@ async def index() -> FileResponse:
 
 @app.get("/manifest.webmanifest")
 async def manifest() -> FileResponse:
+    # Vite build output copies static/public/* to dist/static/* (its root), so
+    # the built path matches the unbuilt dev path (static/public/...) once
+    # STATIC_DIR points at dist/static — check both so this route works
+    # whether or not `npm run build` has run.
     manifest_path = STATIC_DIR / "manifest.webmanifest"
+    if not manifest_path.exists():
+        manifest_path = STATIC_DIR / "public" / "manifest.webmanifest"
     if not manifest_path.exists():
         raise HTTPException(status_code=404, detail="Manifest is not available")
     return FileResponse(manifest_path, media_type="application/manifest+json")
@@ -171,6 +250,7 @@ async def service_worker() -> Response:
         raise HTTPException(status_code=404, detail="Service worker is not available")
     content = sw_path.read_text(encoding="utf-8")
     content = content.replace("__CACHE_VERSION__", static_assets_version())
+    content = content.replace("__PRECACHE_URLS__", json.dumps(precache_urls()))
     # No-cache (not just no-store) so the browser always revalidates the SW
     # script itself with the server on every check — the one request that
     # must never be served stale, since it's what decides whether every other
@@ -216,8 +296,8 @@ async def api_create_event(payload: EventIn, admin: dict = Depends(require_admin
 async def api_delete_event(event_id: str, admin: dict = Depends(require_admin)) -> dict:
     if not get_event(event_id):
         raise HTTPException(status_code=404, detail="Event not found")
-    database_counts = delete_event_data(event_id)
-    images_removed = clear_event_images(event_id)
+    database_counts = await run_in_threadpool(delete_event_data, event_id)
+    images_removed = await run_in_threadpool(clear_event_images, event_id)
     return {
         "event_id": event_id,
         "status": "deleted",
@@ -237,19 +317,28 @@ async def read_upload(file: UploadFile | None) -> bytes | None:
     return data
 
 
+def _thumb_filename(filename: str) -> str:
+    if filename.endswith("_thumb.jpg"):
+        return filename
+    return f"{filename.rsplit('.', 1)[0]}_thumb.jpg"
+
+
 def save_side_file(event_id: str, card_id: str, side: str, upload: UploadFile, image_bytes: bytes) -> str:
-    """Compress the upload and store it in GridFS. Returns the logical filename.
+    """Compress the upload and store it (plus a small thumbnail derivative) in
+    GridFS. Returns the logical filename.
 
     The stored copy is a downscaled/re-encoded JPEG (see compress_for_storage) so
     the database stays small; the original full-size bytes are never persisted.
     """
     filename = f"{card_id}_{side}.jpg"
     stored = compress_for_storage(image_bytes)
+    thumb = make_thumbnail(stored)
     bucket = mongo.get_gridfs()
     if bucket is None:
         raise HTTPException(status_code=503, detail="Image storage (MongoDB) is unavailable")
     # Drop any previous file with this name (e.g. a retake) so we don't accumulate.
     _delete_gridfs_by_name(filename)
+    _delete_gridfs_by_name(_thumb_filename(filename))
     bucket.upload_from_stream(
         filename,
         BytesIO(stored),
@@ -260,6 +349,17 @@ def save_side_file(event_id: str, card_id: str, side: str, upload: UploadFile, i
             "content_type": "image/jpeg",
             "original_bytes": len(image_bytes),
             "stored_bytes": len(stored),
+        },
+    )
+    bucket.upload_from_stream(
+        _thumb_filename(filename),
+        BytesIO(thumb),
+        metadata={
+            "event_id": event_id,
+            "card_id": card_id,
+            "side": side,
+            "content_type": "image/jpeg",
+            "stored_bytes": len(thumb),
         },
     )
     return filename
@@ -549,8 +649,10 @@ async def upload_card(
     if front_bytes is None:
         raise HTTPException(status_code=400, detail="Front image is required")
     # Front+back are OCR'd as one stitched image, so a card is always 1 Vision unit.
-    enforce_usage_limits({"google_vision": 1, "gemini": 1})
-    return process_card(event_id, front, front_bytes, back, back_bytes, scanned_by=user["email"])
+    await run_in_threadpool(enforce_usage_limits, {"google_vision": 1, "gemini": 1})
+    return await run_in_threadpool(
+        process_card, event_id, front, front_bytes, back, back_bytes, scanned_by=user["email"]
+    )
 
 
 @app.post("/events/{event_id}/vision-scan")
@@ -566,7 +668,7 @@ async def vision_scan(
     back_bytes = await read_upload(back)
     if front_bytes is None:
         raise HTTPException(status_code=400, detail="Front image is required")
-    enforce_usage_limits({"gemini": 1})
+    await run_in_threadpool(enforce_usage_limits, {"gemini": 1})
     fields = structure_card_image(
         event_id=event_id,
         front_image=front_bytes,
@@ -595,7 +697,7 @@ async def ocr_scan(
     if front_bytes is None:
         raise HTTPException(status_code=400, detail="Front image is required")
     # Front+back are OCR'd as one stitched image, so a card is always 1 Vision unit.
-    enforce_usage_limits({"google_vision": 1})
+    await run_in_threadpool(enforce_usage_limits, {"google_vision": 1})
     results = google_vision_extract_combined(front_bytes, back_bytes, event_id=event_id)
     return {
         "event_id": event_id,
@@ -616,8 +718,8 @@ async def records(event_id: str, user: dict = Depends(require_user)) -> dict:
 async def reset_cards(event_id: str, admin: dict = Depends(require_admin)) -> dict:
     if not get_event(event_id):
         raise HTTPException(status_code=404, detail="Event not found")
-    database_counts = reset_event_data(event_id)
-    images_removed = clear_event_images(event_id)
+    database_counts = await run_in_threadpool(reset_event_data, event_id)
+    images_removed = await run_in_threadpool(clear_event_images, event_id)
     return {
         "event_id": event_id,
         "status": "reset",
@@ -713,8 +815,10 @@ async def download_excel(
         ]
     selected_columns = [c.strip() for c in columns.split(",") if c.strip()] if columns else None
     # Images come from GridFS (no local files); the workbook is built in memory
-    # and streamed straight back — nothing is written to disk.
-    workbook_bytes = build_workbook_bytes(
+    # and streamed straight back — nothing is written to disk. build_workbook_bytes
+    # does synchronous GridFS reads + openpyxl work, so run it off the event loop.
+    workbook_bytes = await run_in_threadpool(
+        build_workbook_bytes,
         records_for_event,
         image_provider=lambda filename: (_read_gridfs_image(filename) or (None, None))[0],
         columns=selected_columns,
@@ -727,9 +831,44 @@ async def download_excel(
 
 
 @app.get("/events/{event_id}/images/{filename}")
-async def get_image(event_id: str, filename: str, user: dict = Depends(require_user)) -> Response:
-    image = _read_gridfs_image(filename)
+async def get_image(
+    event_id: str, filename: str, request: Request, thumb: bool = False, user: dict = Depends(require_user)
+) -> Response:
+    # GridFS reads are synchronous pymongo I/O — run off the event loop so one
+    # slow read can't stall every other concurrent request (this was the cause
+    # of 6-12s stalls when many thumbnails were requested at once).
+    target = _thumb_filename(filename) if thumb else filename
+    image = await run_in_threadpool(_read_gridfs_image, target)
+    if image is None and thumb:
+        # No thumbnail yet for an older/pre-thumbnail card — fall back to the
+        # full image now, and opportunistically generate+store the thumbnail
+        # in the background so the next request for this card is fast.
+        image = await run_in_threadpool(_read_gridfs_image, filename)
+        if image is not None:
+            data, _content_type = image
+            asyncio.get_event_loop().run_in_executor(None, _backfill_thumbnail, target, data)
     if image is None:
         raise HTTPException(status_code=404, detail="Image not found")
     data, content_type = image
-    return Response(content=data, media_type=content_type)
+    etag = f'"{hashlib.sha256(data).hexdigest()[:32]}"'
+    headers = {
+        # Private (route is auth-gated) and capped at a day rather than a year:
+        # a retake reuses the same filename with new bytes, so long-lived
+        # immutable caching risks showing a stale card photo after a retake.
+        "Cache-Control": "private, max-age=86400, must-revalidate",
+        "ETag": etag,
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=data, media_type=content_type, headers=headers)
+
+
+def _backfill_thumbnail(thumb_filename: str, full_image_bytes: bytes) -> None:
+    try:
+        bucket = mongo.get_gridfs()
+        if bucket is None:
+            return
+        _delete_gridfs_by_name(thumb_filename)
+        bucket.upload_from_stream(thumb_filename, BytesIO(make_thumbnail(full_image_bytes)))
+    except Exception:  # noqa: BLE001 — best-effort; the fallback path already served the request
+        pass

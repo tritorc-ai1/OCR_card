@@ -3,31 +3,12 @@
 // automatically whenever ANY app-shell asset changes — no more manually
 // bumping a version string by hand and shipping a stale cache to real users.
 const CACHE_VERSION = "cardscan-__CACHE_VERSION__";
-const PRECACHE_URLS = [
-  "/",
-  "/manifest.webmanifest",
-  "/static/css/tokens.css",
-  "/static/css/components.css",
-  "/static/css/screens.css",
-  "/static/js/app-shell.js",
-  "/static/js/api.js",
-  "/static/js/utils.js",
-  "/static/js/scan.js",
-  "/static/js/queue.js",
-  "/static/js/process-sheet.js",
-  "/static/js/records.js",
-  "/static/js/dashboard.js",
-  "/static/js/events.js",
-  "/static/js/more.js",
-  "/static/icons/icon-192.png",
-  "/static/icons/icon-512.png",
-  "/static/icons/icon-192-maskable.png",
-  "/static/icons/icon-512-maskable.png",
-  "/static/fonts/ibm-plex-sans-400.woff2",
-  "/static/fonts/ibm-plex-sans-500.woff2",
-  "/static/fonts/ibm-plex-sans-600.woff2",
-  "/static/fonts/ibm-plex-mono-500.woff2",
-];
+// Substituted server-side too (see app/main.py's service_worker() route):
+// the bundled JS/CSS filenames are content-hashed by Vite and change on every
+// build, so this list is generated from the build's manifest.json rather than
+// hardcoded — a hardcoded list here would 404 on install() the moment the
+// bundle output filenames change, breaking cache.addAll() entirely.
+const PRECACHE_URLS = __PRECACHE_URLS__;
 
 // Only the immutable app-shell assets (JS/CSS/fonts/icons) are cached, so the
 // PWA stays installable. NOTHING data-related is cached in the browser anymore:

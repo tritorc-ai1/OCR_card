@@ -47,6 +47,28 @@ def compress_for_storage(
         return file_bytes
 
 
+def make_thumbnail(stored_jpeg_bytes: bytes, max_edge: int = 160, quality: int = 70) -> bytes:
+    """Downscale an already-compressed stored JPEG (see compress_for_storage) into
+    a small list-view thumbnail. Falls back to the input bytes if Pillow is
+    unavailable or decoding fails, so a thumbnail request never breaks the image.
+    """
+    if Image is None:
+        return stored_jpeg_bytes
+    try:
+        with Image.open(BytesIO(stored_jpeg_bytes)) as img:
+            img = ImageOps.exif_transpose(img).convert("RGB")
+            width, height = img.size
+            longest = max(width, height)
+            if longest > max_edge:
+                scale = max_edge / longest
+                img = img.resize((max(1, int(width * scale)), max(1, int(height * scale))))
+            output = BytesIO()
+            img.save(output, format="JPEG", quality=quality, optimize=True)
+        return output.getvalue()
+    except Exception:  # pragma: no cover - defensive; caller falls back to full image
+        return stored_jpeg_bytes
+
+
 def preprocess_image(file_bytes: bytes) -> tuple[bytes, int | None, int | None, str, list[str]]:
     if Image is None:
         return file_bytes, None, None, "Unknown", ["Pillow is not installed; image preprocessing skipped"]

@@ -168,9 +168,26 @@ function renderUsage(state) {
   renderMyActivity(state);
 }
 
+function myActivitySkeletonHtml() {
+  return `
+    <div class="admin-stat-row" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:var(--space-3)">
+      <div class="skeleton-block" style="height:48px"></div>
+      <div class="skeleton-block" style="height:48px"></div>
+      <div class="skeleton-block" style="height:48px"></div>
+    </div>
+    <div class="skeleton-line" style="width:100%;height:20px;margin-bottom:6px"></div>
+    <div class="skeleton-line" style="width:100%;height:20px;margin-bottom:6px"></div>
+    <div class="skeleton-line" style="width:100%;height:20px"></div>
+  `;
+}
+
 async function renderMyActivity(state) {
   const el = $("#myActivityContent");
   if (!el) return;
+  // Revisiting Home re-fetches (/me/stats can take ~1s per the perf audit) —
+  // without this, the previous event's stats stay on screen looking current
+  // while the new ones load.
+  el.innerHTML = myActivitySkeletonHtml();
   try {
     const stats = await api.myStats(14);
     const recentDays = (stats.daily || []).slice(-7).reverse();

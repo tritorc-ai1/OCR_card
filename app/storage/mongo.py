@@ -16,6 +16,7 @@ SSL-context factory (there is no public MongoClient kwarg to inject a context).
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
@@ -27,6 +28,13 @@ logger = logging.getLogger(__name__)
 _client = None
 _db = None
 _gridfs_bucket = None
+
+# Guards client construction: without this, the startup warm-up thread and an
+# incoming request's own thread can both see _client is None at the same time
+# and each open a real MongoClient — wasting a second Atlas TLS handshake and
+# connection-pool exactly when a cold start is already contending for the
+# Atlas M0 tier's tight connection cap.
+_client_lock = threading.Lock()
 
 # Circuit breaker: after a failed connect, don't retry (and eat another
 # multi-second server-selection timeout) until this cooldown passes.
@@ -90,31 +98,38 @@ def get_client():
         return _client
     if time.monotonic() < _next_retry_at:
         return None
-    try:
-        from pymongo import MongoClient
-        from pymongo.server_api import ServerApi
-        import certifi
+    with _client_lock:
+        # Re-check: another thread may have finished building the client (or
+        # hit the retry cooldown) while this one was waiting for the lock.
+        if _client is not None:
+            return _client
+        if time.monotonic() < _next_retry_at:
+            return None
+        try:
+            from pymongo import MongoClient
+            from pymongo.server_api import ServerApi
+            import certifi
 
-        options: dict[str, Any] = {
-            "server_api": ServerApi("1"),
-            "serverSelectionTimeoutMS": 5000,
-            "connectTimeoutMS": 10000,
-            # Larger socket timeout than the usage counters used, since GridFS
-            # image up/downloads move more bytes than a tiny counter doc.
-            "socketTimeoutMS": 30000,
-            "tls": True,
-            "tlsCAFile": certifi.where(),
-        }
-        if _uri_has_option(MONGODB_URI, {"tls", "ssl"}):
-            options.pop("tls", None)
-            options.pop("tlsCAFile", None)
-        _ensure_ssl_hardening_patch()
-        _client = MongoClient(MONGODB_URI, **options)
-        return _client
-    except Exception as exc:  # noqa: BLE001
-        _next_retry_at = time.monotonic() + _RETRY_COOLDOWN_SECONDS
-        logger.warning("MongoDB connection unavailable: %s", exc)
-        return None
+            options: dict[str, Any] = {
+                "server_api": ServerApi("1"),
+                "serverSelectionTimeoutMS": 5000,
+                "connectTimeoutMS": 10000,
+                # Larger socket timeout than the usage counters used, since GridFS
+                # image up/downloads move more bytes than a tiny counter doc.
+                "socketTimeoutMS": 30000,
+                "tls": True,
+                "tlsCAFile": certifi.where(),
+            }
+            if _uri_has_option(MONGODB_URI, {"tls", "ssl"}):
+                options.pop("tls", None)
+                options.pop("tlsCAFile", None)
+            _ensure_ssl_hardening_patch()
+            _client = MongoClient(MONGODB_URI, **options)
+            return _client
+        except Exception as exc:  # noqa: BLE001
+            _next_retry_at = time.monotonic() + _RETRY_COOLDOWN_SECONDS
+            logger.warning("MongoDB connection unavailable: %s", exc)
+            return None
 
 
 def get_database():

@@ -22,7 +22,6 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
 
 from app.config import (
     MONGO_GEMINI_DAILY_LIMIT,
@@ -33,6 +32,7 @@ from app.config import (
     MONGODB_DB_NAME,
     MONGODB_URI,
 )
+from app.storage import mongo
 
 logger = logging.getLogger(__name__)
 
@@ -49,21 +49,8 @@ _PROVIDER_PERIODS = {
     "gemini": ("day", MONGO_GEMINI_DAILY_LIMIT, "Gemini", "requests"),
 }
 
-_client = None
 _index_ready = False
 _last_error: str | None = None
-
-# Reuse the client across calls; only tear it down after repeated hard failures
-# (PyMongo reconnects on its own for transient blips). Closing before discard
-# releases the old connection pool/monitor threads instead of leaking them.
-_consecutive_failures = 0
-_MAX_FAILURES_BEFORE_RESET = 3
-
-# Circuit breaker: after a connection failure, don't retry (and eat another
-# multi-second timeout) until this cooldown passes. Keeps scans fast during a
-# Mongo outage instead of stalling every request on server selection.
-_RETRY_COOLDOWN_SECONDS = 30.0
-_next_retry_at = 0.0
 
 # Short-lived in-memory cache of per-period counts, keyed "provider:period".
 # Value is (monotonic_ts, used, tokens). Keeps reads off the request path and
@@ -136,131 +123,39 @@ def _error_summary() -> str | None:
     return "MongoDB connection failed from this server."
 
 
-def _uri_has_option(uri: str, names: set[str]) -> bool:
-    try:
-        query = urlsplit(uri).query
-    except ValueError:
-        return False
-    return bool({key.lower() for key, _value in parse_qsl(query, keep_blank_values=True)} & names)
-
-
-def _harden_ssl_context(ctx):
-    """Force TLS 1.2 as the max version and widen the cipher list.
-
-    Root cause of TLSV1_ALERT_INTERNAL_ERROR on Render:
-    - Render uses Linux with OpenSSL 3.x.
-    - OpenSSL 3.x changed default TLS 1.3 behaviour/extensions that trigger
-      Atlas's TLS terminator to reject the handshake with an internal error.
-    - Forcing TLS 1.2 as the maximum version avoids this incompatibility.
-    - Using SECLEVEL=1 widens the accepted cipher list for older Atlas configs.
-    """
-    import ssl
-
-    try:
-        ctx.maximum_version = ssl.TLSVersion.TLSv1_2
-    except AttributeError:
-        pass  # ssl.TLSVersion not available on very old Python builds
-    try:
-        ctx.set_ciphers("HIGH:!aNULL:!MD5:@SECLEVEL=1")
-    except ssl.SSLError:
-        pass
-    return ctx
-
-
-_ssl_patch_applied = False
-
-
-def _ensure_ssl_hardening_patch() -> None:
-    """Patch pymongo's internal SSL context builder to harden every context it creates.
-
-    PyMongo's MongoClient has no public option for injecting a pre-built
-    ssl.SSLContext — neither "ssl_context" nor "tlsSSLContext" is a
-    recognized keyword (both raise ConfigurationError; PyMongo only exposes
-    the tls*/ssl string/bool options listed in pymongo.common.VALIDATORS).
-    Patching the context factory it calls internally is the only way to
-    force TLS 1.2, short of vendoring pymongo's TLS setup.
-    """
-    global _ssl_patch_applied
-    if _ssl_patch_applied:
-        return
-    try:
-        import pymongo.client_options as _client_options
-
-        _original_get_ssl_context = _client_options.get_ssl_context
-
-        def _patched_get_ssl_context(*args, **kwargs):
-            return _harden_ssl_context(_original_get_ssl_context(*args, **kwargs))
-
-        _client_options.get_ssl_context = _patched_get_ssl_context
-        _ssl_patch_applied = True
-    except Exception as patch_err:
-        logger.debug("Could not patch pymongo ssl context: %s", patch_err)
-
-
 def _get_collection():
-    """Return the usage collection, or None if Mongo is unavailable/disabled."""
-    global _client, _index_ready, _last_error, _consecutive_failures, _next_retry_at
+    """Return the usage collection, or None if Mongo is unavailable/disabled.
+
+    Reuses app.storage.mongo's single shared MongoClient instead of keeping a
+    second one — this module used to build its own MongoClient (with its own
+    TLS handshake, connection pool, and circuit breaker) entirely independent
+    of the one every other route already warms at startup. On Render's free
+    tier, that meant every cold start paid for TWO multi-second Atlas
+    handshakes instead of one: whichever request touched app.storage.mongo
+    first, and then separately whatever request first hit /llm-usage or a
+    scan's check_limits() — measured locally at ~9s for that second, unwarmed
+    handshake alone. Routing through the shared client means this module is
+    already warm by the time the app finishes booting, for free.
+    """
+    global _index_ready, _last_error
     if not is_enabled():
         _last_error = None
         return None
-    # During a known outage, skip the (re)connect attempt until the cooldown
-    # elapses so scans don't stall on a server-selection timeout every time.
-    if _client is None and time.monotonic() < _next_retry_at:
+    db = mongo.get_database()
+    if db is None:
+        _last_error = "MongoDB is configured but unreachable"
         return None
     try:
-        # Reuse the existing client — PyMongo reconnects on its own, so a
-        # transient blip should not trigger a full rebuild (which leaks the old
-        # connection pool and monitor threads and churns the M0 connection cap).
-        if _client is None:
-            _index_ready = False
-            # Import here so the app still starts if pymongo is missing.
-            from pymongo import MongoClient
-            from pymongo.server_api import ServerApi
-
-            import certifi
-
-            client_options: dict[str, Any] = {
-                "server_api": ServerApi("1"),
-                "serverSelectionTimeoutMS": 5000,
-                "connectTimeoutMS": 5000,
-                "socketTimeoutMS": 5000,
-                "tls": True,
-                "tlsCAFile": certifi.where(),
-            }
-            # Remove tls option if URI already specifies it to avoid conflicts.
-            if _uri_has_option(MONGODB_URI, {"tls", "ssl"}):
-                client_options.pop("tls", None)
-                client_options.pop("tlsCAFile", None)
-
-            # Force TLS 1.2 to avoid OpenSSL 3.x / TLS 1.3 handshake failures
-            # with Atlas on Render (see _harden_ssl_context docstring).
-            _ensure_ssl_hardening_patch()
-
-            _client = MongoClient(MONGODB_URI, **client_options)
-
-        collection = _client[MONGODB_DB_NAME][COLLECTION_NAME]
+        collection = db[COLLECTION_NAME]
         if not _index_ready:
             collection.create_index([("provider", 1), ("period", 1)], unique=True)
             collection.create_index("expire_at", expireAfterSeconds=0)
             _index_ready = True
         _last_error = None
-        _consecutive_failures = 0
         return collection
     except Exception as exc:  # noqa: BLE001
         _last_error = str(exc)
-        _consecutive_failures += 1
-        _next_retry_at = time.monotonic() + _RETRY_COOLDOWN_SECONDS
         logger.warning("Mongo usage unavailable: %s", exc)
-        # Only tear the client down after repeated failures, and close it first
-        # so the old pool is released rather than leaked.
-        if _consecutive_failures >= _MAX_FAILURES_BEFORE_RESET and _client is not None:
-            try:
-                _client.close()
-            except Exception:  # noqa: BLE001
-                pass
-            _client = None
-            _index_ready = False
-            _consecutive_failures = 0
         return None
 
 
