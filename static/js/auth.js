@@ -21,6 +21,19 @@ export async function initAuth(state) {
 }
 
 /**
+ * Sign out and reload — shared by the header/settings logout buttons and the
+ * idle-timeout auto-signout in app-shell.js, so there's exactly one place
+ * that clears the session.
+ */
+export async function performLogout() {
+  try {
+    await api.logout();
+  } finally {
+    location.reload();
+  }
+}
+
+/**
  * Show the login screen and hide the main app.
  */
 export function showLogin() {
@@ -73,8 +86,7 @@ export function wireAuth({ onLogin }) {
   const doLogout = async (e) => {
     e.preventDefault();
     try {
-      await api.logout();
-      location.reload();
+      await performLogout();
     } catch (err) {
       showToast("Logout failed: " + err.message, "error");
     }
@@ -120,7 +132,7 @@ export function wireAuth({ onLogin }) {
  * Apply role-based visibility rules: show/hide admin nav, hide destructive buttons for users.
  */
 export function applyRoleToUi(state) {
-  const isAdmin = state.user?.role === "admin";
+  const isAdmin = state.user?.role === "admin" || state.user?.role === "super_admin";
 
   // Admin nav items (bottom nav + desktop)
   const navAdmin = document.getElementById("navAdmin");

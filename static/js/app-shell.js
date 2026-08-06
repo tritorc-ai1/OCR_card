@@ -6,7 +6,7 @@ import { wireScanScreen, openScanScreen } from "./scan.js";
 import { wireMoreScreen, refreshMoreScreen } from "./more.js";
 import { wireProcessSheet } from "./process-sheet.js";
 import { initQueue, getQueueSnapshot } from "./queue.js";
-import { initAuth, wireAuth, showLogin, applyRoleToUi } from "./auth.js";
+import { initAuth, wireAuth, showLogin, applyRoleToUi, performLogout } from "./auth.js";
 import { wireAdminScreen, refreshAdminScreen } from "./admin.js";
 
 export const state = {
@@ -25,6 +25,18 @@ const $ = (selector) => document.querySelector(selector);
 
 const ROUTES = ["#/home", "#/records", "#/more", "#/admin"];
 
+// wireAuth's onLogin fires right after a successful interactive login (the
+// login FORM, not the initial page-load boot sequence below). state.user and
+// the role-gated nav (Admin link) were only ever set during that page-load
+// path — logging in without a reload left the app effectively unaware it was
+// an admin session until the next full refresh. Mirror what page load does:
+// record the user and apply role visibility before booting data.
+async function handleLogin(user) {
+  state.user = user;
+  applyRoleToUi(state);
+  await bootData();
+}
+
 async function bootData() {
   await initQueue();
   const healthPromise = checkHealth();
@@ -40,6 +52,35 @@ async function bootData() {
   void Promise.allSettled([healthPromise, loadRecords(), loadUsage()]).then(() => {
     handleRouteChange();
   });
+  startIdleWatcher();
+}
+
+// Auto-signout: 20 minutes with no interaction AND nothing left in the scan
+// queue. Gated on an empty queue so a batch upload left running while the
+// user steps away is never interrupted — the check just defers and tries
+// again a minute later instead of logging out mid-upload.
+const IDLE_LOGOUT_MS = 20 * 60 * 1000;
+const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
+const ACTIVITY_EVENTS = ["pointerdown", "keydown", "touchstart", "wheel"];
+let lastActivityAt = Date.now();
+let idleWatcherStarted = false;
+
+function markActivity() {
+  lastActivityAt = Date.now();
+}
+
+function startIdleWatcher() {
+  if (idleWatcherStarted) return;
+  idleWatcherStarted = true;
+  markActivity();
+  ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, markActivity, { passive: true }));
+  window.setInterval(() => {
+    if (Date.now() - lastActivityAt < IDLE_LOGOUT_MS) return;
+    const queue = getQueueSnapshot();
+    const queueBusy = queue.some((it) => it.status === "pending" || it.status === "uploading");
+    if (queueBusy) return; // still working — check again next interval
+    performLogout();
+  }, IDLE_CHECK_INTERVAL_MS);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -53,7 +94,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   wireMoreScreen();
   wireAdminScreen();
   wireProcessSheet();
-  wireAuth({ onLogin: bootData });
+  wireAuth({ onLogin: handleLogin });
 
   window.addEventListener("hashchange", handleRouteChange);
   window.addEventListener("online", handleConnectivityChange);
@@ -113,8 +154,15 @@ function handleRouteChange() {
   const [routeBase] = hash.split("/").slice(0, 2);
   let normalized = ROUTES.includes(hash) ? hash : (hash.startsWith("#/records") ? "#/records" : "#/home");
 
-  // Guard: non-admin users can't access #/admin
-  if (normalized === "#/admin" && state.user?.role !== "admin") {
+  // Guard: non-admin users can't access #/admin. Only redirect once we
+  // actually KNOW the role — state.user is still null during the brief
+  // window before initAuth() resolves on every fresh page load/refresh
+  // (handleRouteChange() runs once before that, at line ~67, entirely
+  // hidden behind the loading screen). Redirecting on that premature call
+  // permanently rewrote window.location.hash to #/home before the real
+  // admin check ever ran, so reloading while on #/admin always bounced you
+  // to Home — this is what "admin page doesn't reload" was.
+  if (normalized === "#/admin" && state.user && state.user.role !== "admin" && state.user.role !== "super_admin") {
     normalized = "#/home";
     window.location.hash = "#/home";
     return;

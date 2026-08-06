@@ -189,7 +189,7 @@ def _seed_mongo_on_startup() -> None:
         # (see PROTECTED_ADMIN_EMAIL) so the team always has a working login.
         from app.config import PROTECTED_ADMIN_EMAIL
 
-        seed_test_user(PROTECTED_ADMIN_EMAIL, "Tritorc@123", role="admin", created_by="seed")
+        seed_test_user(PROTECTED_ADMIN_EMAIL, "Tritorc@123", role="super_admin", created_by="seed")
     except Exception:  # noqa: BLE001
         pass
     try:

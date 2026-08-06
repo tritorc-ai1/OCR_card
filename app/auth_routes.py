@@ -49,6 +49,10 @@ class CreateUserIn(BaseModel):
 class PatchUserIn(BaseModel):
     active: bool | None = None
     new_password: str | None = None
+    role: str | None = None
+
+
+VALID_ROLES = ("user", "admin", "super_admin")
 
 
 # --- Auth endpoints ---------------------------------------------------------
@@ -143,7 +147,7 @@ async def admin_patch_user(email: str, payload: PatchUserIn, admin: dict = Depen
     target = auth.normalize_email(email)
     if users.get_user(target) is None:
         raise HTTPException(status_code=404, detail="User not found")
-    if payload.active is None and payload.new_password is None:
+    if payload.active is None and payload.new_password is None and payload.role is None:
         raise HTTPException(status_code=400, detail="Nothing to update")
     # Guard against the admin locking themselves out.
     if payload.active is False and target == admin["email"]:
@@ -158,6 +162,20 @@ async def admin_patch_user(email: str, payload: PatchUserIn, admin: dict = Depen
             users.set_user_password(target, auth.hash_password(payload.new_password))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if payload.role is not None:
+        # Changing roles is a super-admin-only privilege — a regular admin can
+        # still activate/deactivate and reset passwords via this same endpoint,
+        # but escalating someone (including themselves) to admin/super_admin
+        # requires the higher tier.
+        if admin.get("role") != "super_admin":
+            raise HTTPException(status_code=403, detail="Only a super admin can change roles")
+        if payload.role not in VALID_ROLES:
+            raise HTTPException(status_code=400, detail=f"role must be one of {', '.join(VALID_ROLES)}")
+        # The seeded permanent admin's role is as protected as its active
+        # status — never demotable, even by another super admin.
+        if target == PROTECTED_ADMIN_EMAIL:
+            raise HTTPException(status_code=400, detail="This account's role is permanent and cannot be changed")
+        users.set_user_role(target, payload.role)
     return users.public_view(users.get_user(target))
 
 

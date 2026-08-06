@@ -79,6 +79,18 @@ def set_user_active(email: str, active: bool) -> bool:
     return result.matched_count > 0
 
 
+def set_user_role(email: str, role: str) -> bool:
+    """Change a user's role. Takes effect immediately on their next request —
+    unlike active/password changes, role is read fresh from Mongo on every
+    request (see app/auth.py's _current_user_or_none), never baked into the
+    signed session token, so no token_version bump/forced re-login is needed."""
+    result = _db()[USERS].update_one(
+        {"_id": normalize_email(email)},
+        {"$set": {"role": role}},
+    )
+    return result.matched_count > 0
+
+
 def set_user_password(email: str, password_hash: str) -> bool:
     """Replace a user's password hash. Bumps token_version so every existing
     session (on any device) is invalidated; the caller changing their own

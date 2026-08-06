@@ -151,6 +151,12 @@ def require_user(request: Request) -> dict:
 
 
 def require_admin(user: dict = Depends(require_user)) -> dict:
-    if user.get("role") != "admin":
+    if user.get("role") not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+def require_super_admin(user: dict = Depends(require_user)) -> dict:
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin access required")
     return user

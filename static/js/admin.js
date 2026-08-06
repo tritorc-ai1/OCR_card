@@ -58,6 +58,19 @@ export function wireAdminScreen() {
   document.getElementById("userActivityCloseBtn")?.addEventListener("click", () => {
     document.getElementById("userActivitySheet")?.close();
   });
+
+  // Role select is a <select>, not a button — it fires "change", not "click".
+  document.addEventListener("change", async (e) => {
+    const select = e.target.closest("select[data-action='change-role']");
+    if (!select) return;
+    const email = select.dataset.email;
+    const role = select.value;
+    if (!confirm(`Change ${email}'s role to "${role.replace("_", " ")}"?`)) {
+      await refreshAdminScreen(window.state || {}); // revert the <select> to its real value
+      return;
+    }
+    await handleUserAction(email, { role });
+  });
 }
 
 async function handleUserAction(email, payload) {
@@ -226,8 +239,9 @@ export async function refreshAdminScreen(state) {
       ? `<div class="admin-card-sub" style="margin:10px 0 0">${statsResp.untracked_records} records predate per-user tracking.</div>`
       : "";
 
+    const viewerIsSuperAdmin = state.user?.role === "super_admin";
+    const roleLabels = { super_admin: "Super Admin", admin: "Admin", user: "User" };
     const userRows = users.map((user) => {
-      const isAdminRole = user.role === "admin";
       const isProtected = user.email === PROTECTED_ADMIN_EMAIL;
       const stat = statsByEmail.get(user.email);
       const rowAction = isProtected
@@ -235,11 +249,18 @@ export async function refreshAdminScreen(state) {
         : user.active
           ? `<button class="admin-row-action danger" data-action="deactivate" data-email="${escapeHtml(user.email)}" type="button">Deactivate</button>`
           : `<button class="admin-row-action" data-action="reactivate" data-email="${escapeHtml(user.email)}" type="button">Reactivate</button>`;
+      // Only a super admin can change roles, and never the protected seed
+      // account's — everyone else sees the same read-only chip as today.
+      const roleCell = viewerIsSuperAdmin && !isProtected
+        ? `<select class="role-select" data-action="change-role" data-email="${escapeHtml(user.email)}">
+            ${["user", "admin", "super_admin"].map((r) => `<option value="${r}" ${user.role === r ? "selected" : ""}>${roleLabels[r]}</option>`).join("")}
+          </select>`
+        : `<span class="role-chip ${user.role === "super_admin" ? "super-admin" : user.role === "admin" ? "admin" : "user"}">${roleLabels[user.role] || "User"}</span>`;
       return `
         <tr>
           <td class="user-name">${escapeHtml(displayNameFromEmail(user.email))}</td>
           <td class="user-email">${escapeHtml(user.email)}</td>
-          <td><span class="role-chip ${isAdminRole ? "admin" : "user"}">${isAdminRole ? "Admin" : "User"}</span></td>
+          <td>${roleCell}</td>
           <td><span class="status-chip ${user.active ? "active" : "deactivated"}">${user.active ? "Active" : "Deactivated"}</span></td>
           <td style="color:var(--text-dim)">${relativeTime(stat?.last_scan_at || user.password_changed_at || user.created_at)}</td>
           <td>

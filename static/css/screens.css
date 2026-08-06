@@ -152,14 +152,14 @@ body.bootstrapping::after {
   padding: 9px 14px;
   background: transparent;
   color: #e59a9a;
-  border: 1px solid rgba(220, 38, 38, .4);
+  border: 1px solid rgba(163, 36, 31, .4);
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .btn.danger.app-bar-delete:hover {
-  background: rgba(220, 38, 38, .14);
+  background: rgba(163, 36, 31, .14);
 }
 
 @media (max-width: 640px) {
@@ -978,8 +978,8 @@ body.scan-open #bottomNav {
   min-height: 32px;
   padding: 0 10px;
   color: var(--danger);
-  border: 1px solid rgba(220, 38, 38, .18);
-  background: rgba(220, 38, 38, .05);
+  border: 1px solid rgba(163, 36, 31, .18);
+  background: rgba(163, 36, 31, .05);
   font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;
@@ -992,8 +992,8 @@ body.scan-open #bottomNav {
 
 .event-row-delete:hover,
 .event-row-delete:focus-visible {
-  background: rgba(220, 38, 38, .1);
-  border-color: rgba(220, 38, 38, .35);
+  background: rgba(163, 36, 31, .1);
+  border-color: rgba(163, 36, 31, .35);
 }
 
 #eventCreateForm {
@@ -1141,12 +1141,17 @@ body.scan-open #bottomNav {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  /* Stacked (mobile) layout only — users take priority over the stat cards.
+     Reset to normal order on desktop below, where sidebar/main are actually
+     side-by-side narrow/wide columns, not a top-to-bottom stack. */
+  order: 1;
 }
 
 .admin-main {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  order: 0;
   min-width: 0;
 }
 
@@ -1341,6 +1346,22 @@ table.admin-table .user-email {
 
 .role-chip.admin { background: var(--accent-tint); color: var(--accent-dark); }
 .role-chip.user { background: var(--panel-tint); color: var(--text-dim); }
+.role-chip.super-admin { background: var(--ink); color: #fff; }
+
+.role-select {
+  min-height: 34px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--line-strong);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.role-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .status-chip.active { background: var(--success-bg); color: var(--success); }
 .status-chip.deactivated { background: var(--panel-tint); color: var(--text-dim); }
@@ -1507,6 +1528,13 @@ table.admin-table .user-email {
     grid-template-columns: 340px minmax(0, 1fr);
     gap: var(--space-5);
     align-items: start;
+  }
+
+  /* Desktop is a real side-by-side layout (narrow sidebar, wide main), not a
+     priority stack — undo the mobile reordering so grid placement follows
+     normal DOM/column order again. */
+  .admin-sidebar, .admin-main {
+    order: 0;
   }
 
   #recordsMenuBtn {
