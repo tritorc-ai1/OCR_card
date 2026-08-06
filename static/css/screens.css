@@ -115,7 +115,12 @@ body.bootstrapping::after {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 1 auto;
+  /* Grow (not just shrink) so the switcher fills the bar's available width
+     up to its cap instead of collapsing to label-width and leaving a large
+     dead gap before the Delete button — the whole row reads as one
+     deliberately laid-out group instead of two controls stranded on the
+     left. */
+  flex: 1 1 auto;
   max-width: 48vw;
   min-height: 36px;
   padding: 8px 14px;
@@ -173,20 +178,19 @@ body.bootstrapping::after {
     padding-right: 0;
   }
 
-  .app-bar-delete {
-    min-width: 36px;
+  /* Matches .btn.danger.app-bar-delete's specificity (was plain
+     .app-bar-delete, a single class — always lost to that 3-class base
+     selector regardless of media query, so on narrow screens the button
+     got stuck at min-width:36px from the base rule while its padding/
+     gap/font-size never actually collapsed. The icon and "Delete" text
+     ended up crammed together with no gap inside a too-narrow pill,
+     which is what read as a stray ring around the icon. */
+  .btn.danger.app-bar-delete {
     width: 36px;
     padding: 0;
     gap: 0;
-    border-radius: 999px;
-  }
-
-  .app-bar-delete::after {
-    content: "";
-  }
-
-  .app-bar-delete {
     font-size: 0;
+    border-radius: 999px;
   }
 }
 
