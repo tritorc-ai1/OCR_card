@@ -490,6 +490,19 @@ DESIGNATION_RE = re.compile(
     r"auditor|representative|in-?charge|ceo|coo|cfo|cto|cmo|cio|vp|vice\s+president)\b",
     re.I,
 )
+# Credential/qualification lines ("B.Sc. Engg (Mechanical), F.I.E.", "MBBS,
+# FCPS") commonly sit directly between a person's name and their designation
+# on South/Southeast Asian cards — exactly the two neighboring lines the
+# name/designation heuristics scan. Without excluding them, a qualification
+# line gets mistaken for the name (it has no legal-entity/business-noun
+# marker and often falls within the 1-5 word gate once split on
+# spaces/punctuation).
+QUALIFICATION_RE = re.compile(
+    r"\b(b\.?\s?sc|m\.?\s?sc|b\.?\s?eng|m\.?\s?eng|b\.?\s?tech|m\.?\s?tech|b\.?\s?a|m\.?\s?a|"
+    r"b\.?\s?com|m\.?\s?com|mba|mbbs|ph\.?\s?d|ll\.?\s?b|ll\.?\s?m|dip\.?|c\.?\s?eng|p\.?\s?eng|"
+    r"f\.?\s?i\.?\s?e\.?|m\.?\s?i\.?\s?e\.?|f\.?\s?i\.?\s?mech|fcps|chartered|fellow)\b",
+    re.I,
+)
 ADDRESS_RE = re.compile(
     r"\b(jl\.?|jalan|street|road|kav\.?|kel\.?|kelurahan|kec\.?|kecamatan|kabupaten|provinsi|kota|"
     r"bekasi|banten|cilegon|jakarta|ruko|wisma|building|floor|office|rt\.?|rw\.?|no\.?)\b",
@@ -534,7 +547,7 @@ def _has_contact_value(line: str) -> bool:
     return bool(EMAIL_RE.search(line) or PHONE_RE.search(line) or WEBSITE_RE.search(line))
 
 
-HONORIFIC_RE = re.compile(r"^(mr|mrs|ms|mx|dr|prof|ir|eng|drs|haji|hajjah)\.?$", re.I)
+HONORIFIC_RE = re.compile(r"^(mr|mrs|ms|mx|dr|prof|ir|eng|engr|drs|haji|hajjah)\.?$", re.I)
 
 # Bare field-label words that appear on their own OCR line (the value sits on
 # a different line/column). These must never become a name/designation/
@@ -588,6 +601,8 @@ def _looks_like_person_name(line: str) -> bool:
     if _is_field_label(line) or _is_place_name(line):
         return False
     if _has_contact_value(line) or NOISE_RE.search(line) or ADDRESS_RE.search(line) or SERVICE_RE.search(line):
+        return False
+    if QUALIFICATION_RE.search(line):
         return False
     if _looks_like_company_identity(line):
         return False
@@ -1559,15 +1574,31 @@ Task-specific rules:
                 )
                 if "429" in message or "RESOURCE_EXHAUSTED" in message:
                     _exhausted_key_labels.add(key_label)
-                else:
-                    if _is_config_error(message):
-                        logger.error(
-                            "Gemini image structuring rejected the request (config/schema bug, "
-                            "NOT a quota issue) — every card will silently fall back to the regex "
-                            "extractor until this is fixed: %s",
-                            message[:400],
-                        )
+                    continue
+                if _is_config_error(message):
+                    # The request itself is malformed — every key will reject
+                    # it identically, so trying the rest would just waste
+                    # round trips and quota. Stop here.
+                    logger.error(
+                        "Gemini image structuring rejected the request (config/schema bug, "
+                        "NOT a quota issue) — every card will silently fall back to the regex "
+                        "extractor until this is fixed: %s",
+                        message[:400],
+                    )
                     break
+                # Any other error (auth failure, transient network/server
+                # error, one bad/revoked key) is specific to THIS key or THIS
+                # attempt, not proof every key is broken — try the next one
+                # instead of abandoning the whole card. A prior version broke
+                # out of the loop unconditionally here: a single key with an
+                # invalid credential (401 UNAUTHENTICATED) silently degraded
+                # every card to the weak regex fallback for the rest of the
+                # process, even though the other configured keys were never
+                # attempted.
+                logger.warning(
+                    "Gemini image structuring failed on %s, trying next key: %s", key_label, message[:300]
+                )
+                continue
         if last_error:
             raise last_error
         return {}
@@ -1855,15 +1886,23 @@ Rule-based candidate hints:
                 )
                 if "429" in message or "RESOURCE_EXHAUSTED" in message:
                     _exhausted_key_labels.add(key_label)
-                else:
-                    if _is_config_error(message):
-                        logger.error(
-                            "Gemini text structuring rejected the request (config/schema bug, "
-                            "NOT a quota issue) — every card will silently fall back to the regex "
-                            "extractor until this is fixed: %s",
-                            message[:400],
-                        )
+                    continue
+                if _is_config_error(message):
+                    logger.error(
+                        "Gemini text structuring rejected the request (config/schema bug, "
+                        "NOT a quota issue) — every card will silently fall back to the regex "
+                        "extractor until this is fixed: %s",
+                        message[:400],
+                    )
                     break
+                # See structure_card_image's identical comment: a non-quota
+                # error is specific to this key/attempt, not every key — keep
+                # trying the rest instead of falling back to the weak regex
+                # extractor after just one bad key.
+                logger.warning(
+                    "Gemini text structuring failed on %s, trying next key: %s", key_label, message[:300]
+                )
+                continue
         if last_error:
             raise last_error
         return {}

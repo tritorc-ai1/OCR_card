@@ -50,7 +50,14 @@ def _gemini_api_keys_from_env() -> list[str]:
 
 
 GEMINI_API_KEYS = _gemini_api_keys_from_env()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+# "gemini-2.5-flash" is a pinned model version that some of this app's
+# configured API keys/projects don't have access to (404 "no longer
+# available to new users") — confirmed directly against all 6 configured
+# keys: 3 of them (keys 4-6) only failed because of this, not because the key
+# itself was bad. "gemini-flash-latest" is Google's rolling alias to the
+# current recommended flash model and worked on every key that wasn't
+# independently broken (invalid credential / depleted billing).
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 # When true, send the card image(s) to Gemini alongside the OCR transcript
 # (multimodal) so brand/logo vs. person-name layout is judged from the actual
 # picture instead of flattened OCR text. Still exactly one Gemini call per
