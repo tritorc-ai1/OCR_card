@@ -2,7 +2,7 @@ from io import BytesIO
 
 from PIL import Image as PillowImage
 
-from app.storage.excel_writer import _add_card_image
+from backend.storage.excel_writer import _add_card_image
 from openpyxl import Workbook
 
 

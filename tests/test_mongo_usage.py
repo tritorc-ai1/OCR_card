@@ -1,4 +1,4 @@
-from app.storage import mongo_usage
+from backend.storage import mongo_usage
 
 
 def test_config_report_does_not_connect_to_mongo(monkeypatch) -> None:

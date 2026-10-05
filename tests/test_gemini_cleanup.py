@@ -1,4 +1,4 @@
-from app.llm.gemini_client import clean_structured_fields, structure_card_text_deterministic
+from backend.llm.gemini_client import clean_structured_fields, structure_card_text_deterministic
 
 
 def test_grid_ai_contacts_are_cleaned_to_excel_format() -> None:
@@ -565,7 +565,7 @@ def test_gemini_response_schema_has_no_additional_properties() -> None:
     # JSON schema, which Gemini's response_schema REJECTS with a 400
     # INVALID_ARGUMENT. That error silently forced every card onto the weak
     # regex fallback. The response schema must stay free of it forever.
-    from app.llm.gemini_client import GeminiCardExtraction
+    from backend.llm.gemini_client import GeminiCardExtraction
 
     schema = GeminiCardExtraction.model_json_schema()
     hits = []

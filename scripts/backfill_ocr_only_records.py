@@ -8,14 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.llm.gemini_client import clean_structured_fields, structure_card_text_deterministic
-from app.main import record_from_llm_fields
-from app.models import OCRSideResult, OCRTextBlock
-from app.extraction.candidate_extractors import extract_candidates
-from app.storage.db import event_db_path
-from app.storage.excel_writer import export_records
-from app.storage.repositories import get_event, list_records, upsert_card_record
-from app.config import EVENTS_ROOT
+from backend.llm.gemini_client import clean_structured_fields, structure_card_text_deterministic
+from backend.main import record_from_llm_fields
+from backend.models import OCRSideResult, OCRTextBlock
+from backend.extraction.candidate_extractors import extract_candidates
+from backend.storage.db import event_db_path
+from backend.storage.excel_writer import export_records
+from backend.storage.repositories import get_event, list_records, upsert_card_record
+from backend.config import EVENTS_ROOT
 
 
 def _ocr_results(conn: sqlite3.Connection, card_id: str) -> list[OCRSideResult]:

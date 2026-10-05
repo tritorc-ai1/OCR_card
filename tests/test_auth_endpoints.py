@@ -6,20 +6,20 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture()
 def client(monkeypatch):
-    from app.storage import mongo as mongo_mod
+    from backend.storage import mongo as mongo_mod
 
     mongo_client = mongomock.MongoClient()
     db = mongo_client["cardscan"]
     monkeypatch.setattr(mongo_mod, "get_database", lambda: db)
 
     # Seed one admin and one active regular user directly through the repo.
-    from app import auth
-    from app.storage import users
+    from backend import auth
+    from backend.storage import users
 
     users.create_user("admin@tritorc.com", auth.hash_password("adminpass1"), role="admin", created_by="seed")
     users.create_user("bob@tritorc.com", auth.hash_password("bobpass123"), role="user", created_by="admin@tritorc.com")
 
-    import app.main as main_mod
+    import backend.main as main_mod
 
     return TestClient(main_mod.app)
 
@@ -85,7 +85,7 @@ def test_deactivated_user_cookie_is_rejected(client):
     _login(client, "bob@tritorc.com", "bobpass123")
     assert client.get("/auth/me").status_code == 200
     # Admin deactivates bob (use the same client's admin login via a second client cookie jar).
-    from app.storage import users
+    from backend.storage import users
 
     users.set_user_active("bob@tritorc.com", False)
     assert client.get("/auth/me").status_code == 401
@@ -93,7 +93,7 @@ def test_deactivated_user_cookie_is_rejected(client):
 
 def test_password_reset_invalidates_old_cookie(client):
     _login(client, "bob@tritorc.com", "bobpass123")
-    from app.storage import users
+    from backend.storage import users
 
     users.set_user_password("bob@tritorc.com", "irrelevanthash")
     # bob's existing cookie carries the old token_version -> now invalid.

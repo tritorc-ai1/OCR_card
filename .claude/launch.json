@@ -4,7 +4,7 @@
     {
       "name": "ocr-app",
       "runtimeExecutable": "./venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8123"],
+      "runtimeArgs": ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8123"],
       "port": 8123
     }
   ]

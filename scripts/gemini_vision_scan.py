@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.llm.gemini_client import is_gemini_configured, structure_card_image
+from backend.llm.gemini_client import is_gemini_configured, structure_card_image
 
 
 def read_image(path: Path) -> tuple[bytes, str]:

@@ -4,8 +4,8 @@ import pytest
 
 @pytest.fixture()
 def users(monkeypatch):
-    from app.storage import mongo as mongo_mod
-    from app.storage import users as users_mod
+    from backend.storage import mongo as mongo_mod
+    from backend.storage import users as users_mod
 
     client = mongomock.MongoClient()
     monkeypatch.setattr(mongo_mod, "get_database", lambda: client["cardscan"])
@@ -15,8 +15,8 @@ def users(monkeypatch):
 
 @pytest.fixture()
 def repo(monkeypatch):
-    from app.storage import mongo as mongo_mod
-    from app.storage import repositories as repositories_mod
+    from backend.storage import mongo as mongo_mod
+    from backend.storage import repositories as repositories_mod
 
     client = mongomock.MongoClient()
     monkeypatch.setattr(mongo_mod, "get_database", lambda: client["cardscan"])
@@ -111,7 +111,7 @@ def test_log_scan_ignores_missing_user(repo):
 
 
 def test_count_untracked_records(repo):
-    from app.models import BusinessCardRecord
+    from backend.models import BusinessCardRecord
 
     tracked = BusinessCardRecord(
         record_id="r1", card_id="c1", event_id="evt", date="2026-07-16", time="10:00:00",

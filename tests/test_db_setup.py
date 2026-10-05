@@ -1,4 +1,4 @@
-from app.storage.db import database_summary, initialize_event_database
+from backend.storage.db import database_summary, initialize_event_database
 
 
 def test_initialize_event_database(tmp_path) -> None:

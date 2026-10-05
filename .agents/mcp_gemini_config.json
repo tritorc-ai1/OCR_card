@@ -22,7 +22,7 @@
   },
   "notes": [
     "This is an MCP-style local config reference for agents/tools.",
-    "Actual OCR app usage is implemented in app/ocr/ and app/llm/.",
+    "Actual OCR app usage is implemented in backend/ocr/ and backend/llm/.",
     "Normal uploads use Google Vision OCR first, then Gemini text-only sorting.",
     "Multiple Gemini API keys can be configured, but Gemini API rate limits are project-level, not key-level.",
     "The app tracks local Google Vision OCR units and estimated cost; authoritative billing lives in Google Cloud Console.",

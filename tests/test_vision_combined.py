@@ -1,7 +1,7 @@
 """Tests for the stitched front+back single-call OCR (one Vision unit per card)."""
 
-import app.imaging.preprocess as pp
-import app.ocr.google_vision as gv
+import backend.imaging.preprocess as pp
+import backend.ocr.google_vision as gv
 
 
 def _word(text: str, y: int) -> dict:

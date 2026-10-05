@@ -1,6 +1,6 @@
-from app.extraction.candidate_extractors import extract_candidates
-from app.extraction.field_resolver import format_phone_for_display, resolve_record
-from app.models import OCRSideResult, OCRTextBlock
+from backend.extraction.candidate_extractors import extract_candidates
+from backend.extraction.field_resolver import format_phone_for_display, resolve_record
+from backend.models import OCRSideResult, OCRTextBlock
 
 
 def make_result(text: str) -> OCRSideResult:

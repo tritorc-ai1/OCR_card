@@ -1,6 +1,6 @@
 import pytest
 
-from app import auth
+from backend import auth
 
 
 def test_hash_and_verify_password_roundtrip() -> None:

@@ -3,13 +3,13 @@
 import mongomock
 import pytest
 
-from app.models import BusinessCardRecord, FieldCandidate, OCRSideResult, OCRTextBlock
+from backend.models import BusinessCardRecord, FieldCandidate, OCRSideResult, OCRTextBlock
 
 
 @pytest.fixture()
 def repo(monkeypatch):
-    from app.storage import mongo as mongo_mod
-    from app.storage import repositories as repositories_mod
+    from backend.storage import mongo as mongo_mod
+    from backend.storage import repositories as repositories_mod
 
     client = mongomock.MongoClient()
     monkeypatch.setattr(mongo_mod, "get_database", lambda: client["cardscan"])
@@ -35,7 +35,7 @@ def test_event_and_card_roundtrip(repo):
     repo.insert_card_side("evt", card_id=card_id, side="front", filename="f.jpg", content_type="image/jpeg")
     # Re-inserting the same side replaces rather than duplicates.
     repo.insert_card_side("evt", card_id=card_id, side="front", filename="f2.jpg", content_type="image/jpeg")
-    from app.storage import mongo as mongo_mod
+    from backend.storage import mongo as mongo_mod
     card = mongo_mod.get_database()["cards"].find_one({"_id": card_id})
     assert len(card["sides"]) == 1 and card["sides"][0]["filename"] == "f2.jpg"
 
@@ -49,7 +49,7 @@ def test_ocr_blocks_embedded(repo):
     )
     repo.insert_ocr_result("evt", card_id, result)
     repo.insert_field_candidates("evt", card_id, [FieldCandidate(field="name", value="Jane", confidence=0.8, source="regex")])
-    from app.storage import mongo as mongo_mod
+    from backend.storage import mongo as mongo_mod
     doc = mongo_mod.get_database()["ocr_results"].find_one({"card_id": card_id})
     assert doc["blocks"][0]["text"] == "ACME"
     assert mongo_mod.get_database()["field_candidates"].count_documents({"card_id": card_id}) == 1

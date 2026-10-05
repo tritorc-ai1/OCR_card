@@ -2,6 +2,13 @@
 
 Local FastAPI web app for scanning one-sided or two-sided business cards, reviewing extracted records, and exporting event-wise Excel files with card images for verification.
 
+## Project Structure
+
+```text
+backend/    FastAPI app, package name `backend` (entry point: backend.main:app)
+frontend/   Static PWA (HTML/CSS/JS), served by the backend at /static
+```
+
 ## Current Flow
 
 ```text
@@ -65,7 +72,7 @@ Never commit `.env`, service-account JSON files, event databases, or card images
 ## Run
 
 ```powershell
-.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8022
+.\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8022
 ```
 
 Open:
@@ -89,7 +96,7 @@ The app deploys to [Render](https://render.com)'s free tier with no database ser
 1. Push this repo to GitHub. `.env`, `events/`, `venv/`, `.cache/`, and `data/` are gitignored, so no secrets or local data are committed.
 2. On Render: **New -> Web Service** (or **New -> Blueprint** to use `render.yaml`), and connect the GitHub repo. Render auto-detects Python and uses:
    - Build: `pip install -r requirements.txt`
-   - Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - Start: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
 3. In the service's **Environment** settings, add the secrets (all marked `sync: false` in the blueprint, so you enter them in the dashboard):
    - `GEMINI_API_KEY` (plus `GEMINI_API_KEY_2` through `_6` for extra daily quota).
    - `GOOGLE_CREDENTIALS_JSON` - paste the **entire** service-account JSON as a single value (raw JSON or base64). This replaces the on-disk key file; no file needs to be uploaded. Leave `GOOGLE_APPLICATION_CREDENTIALS` unset on Render.
